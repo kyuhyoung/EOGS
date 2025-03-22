@@ -1,5 +1,5 @@
 {
-    "title": "EOGS: Gaussian Splatting for Earth Observation",
+    "title": "Gaussian Splatting for Efficient Satellite Image Photogrammetry",
     "conference": "Accepted at CVPR 2025",
     "authors": [
         {
@@ -26,8 +26,9 @@
     "URLs": {
         "paper": ["https://arxiv.org/pdf/2412.13047", "assets/logos/arXiv.svg"],
         "arxiv": ["https://arxiv.org/abs/2412.13047", "assets/logos/arXiv.svg"],
+        "supplementary": ["paper/10254_supp.pdf", "assets/logos/arXiv.svg"],
         "code": ["https://github.com/mezzelfo/EOGS", "assets/logos/github.svg"]
     },
     "abstract": "Recently, Gaussian splatting has emerged as a strong alternative to NeRF, demonstrating impressive 3D modeling capabilities while requiring only a fraction of the training and rendering time. In this paper, we show how the standard Gaussian splatting framework can be adapted for remote sensing, retaining its high efficiency. This enables us to achieve state-of-the-art performance in just a few minutes, compared to the day-long optimization required by the best-performing NeRF-based Earth observation methods. The proposed framework incorporates remote-sensing improvements from EO-NeRF, such as radiometric correction and shadow modeling, while introducing novel components, including sparsity, view consistency, and opacity regularizations.",
-    "base64bibtex": "QGlucHJvY2VlZGluZ3N7c2F2YW50YWlyYTIwMjRlb2dzLAogICAgICB0aXRsZT17RU9HUzogR2F1c3NpYW4gU3BsYXR0aW5nIGZvciBFYXJ0aCBPYnNlcnZhdGlvbn0sCiAgICAgIGF1dGhvcj17U2F2YW50IEFpcmEsIEx1Y2EgYW5kIEZhY2Npb2xvLCBHYWJyaWVsZSBhbmQgRWhyZXQsIFRoaWJhdWR9LAogICAgICBib29rdGl0bGU9e1Byb2NlZWRpbmdzIG9mIHRoZSBJRUVFL0NWRiBDb25mZXJlbmNlIG9uIENvbXB1dGVyIFZpc2lvbiBhbmQgUGF0dGVybiBSZWNvZ25pdGlvbn0sCiAgICAgIHllYXI9ezIwMjV9Cn0="
+    "base64bibtex": "QGlucHJvY2VlZGluZ3N7c2F2YW50YWlyYTIwMjRlb2dzLAogICAgICB0aXRsZT17R2F1c3NpYW4gU3BsYXR0aW5nIGZvciBFZmZpY2llbnQgU2F0ZWxsaXRlIEltYWdlIFBob3RvZ3JhbW1ldHJ5fSwKICAgICAgYXV0aG9yPXtTYXZhbnQgQWlyYSwgTHVjYSBhbmQgRmFjY2lvbG8sIEdhYnJpZWxlIGFuZCBFaHJldCwgVGhpYmF1ZH0sCiAgICAgIGJvb2t0aXRsZT17UHJvY2VlZGluZ3Mgb2YgdGhlIElFRUUvQ1ZGIENvbmZlcmVuY2Ugb24gQ29tcHV0ZXIgVmlzaW9uIGFuZCBQYXR0ZXJuIFJlY29nbml0aW9ufSwKICAgICAgeWVhcj17MjAyNX0KfQ=="
 }
