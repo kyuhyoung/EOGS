@@ -1,0 +1,9 @@
+notebooks
+build
+*.egg-info
+__pycache__
+.vscode
+output
+venv
+data/*
+!data/README.md
