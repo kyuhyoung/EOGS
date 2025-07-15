@@ -44,7 +44,13 @@ class MyConverter():
 
         #vertices_UTM = np.concatenate(vertices_UTM, axis=0)
         #vertices_UTM_ground = np.concatenate(vertices_UTM_ground, axis=0)
-
+        '''
+        print(f'len(scene_metadatas) : {len(scene_metadatas)}');  #exit(1)
+        for iM, metadata in enumerate(scene_metadatas):
+            print(f'iM : {iM}, metadata.keys() : {metadata.keys()}')    
+            #   img, height, width, sun_elevation, sun_azimuth, acquisition_date, geojson, min_alt, rpc, keypoints
+        exit(1)     
+        '''
         for metadata in scene_metadatas:
             rpc = rpcm.RPCModel(d=metadata["rpc"], dict_format="rpcm")
             width = metadata["width"]
@@ -266,6 +272,11 @@ def main(
     # Read the scene and for each image:
     # 1. Open the corresponding .json metadata file
     # 2. Run the conversion pipeline
+    '''
+    #t0 = glob(f"{SCENE_METADATA}/*.json")   #   None
+    t0 = f"{SCENE_METADATA}"
+    print(f't0 : {t0}');    exit(1)
+    '''
     metadatas = sorted(glob(f"{SCENE_METADATA}/*.json"))
     metadatas = map(open_json_file, metadatas)
     metadatas = list(metadatas)
@@ -285,6 +296,7 @@ def main(
     test(metadatas)
 
     # Finally, we save the new metadata
+    #print(f'DATASET_DESTINATION : {DATASET_DESTINATION}');  exit(1) 
     os.makedirs(DATASET_DESTINATION, exist_ok=True)
     with open(f"{DATASET_DESTINATION}/affine_models.json", "w") as f:
         json.dump(metadatas, f, indent=4)

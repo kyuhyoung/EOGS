@@ -58,7 +58,9 @@ class ModelParams(ParamGroup):
 
     def extract(self, args):
         g = super().extract(args)
+        #print(f'g.source_path b4 : {g.source_path}') 
         g.source_path = os.path.abspath(g.source_path)
+        #print(f'g.source_path after : {g.source_path}');    exit(1) 
         return g
 
 class PipelineParams(ParamGroup):

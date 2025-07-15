@@ -109,6 +109,7 @@ def render_all_views(cameras, gaussians, pipe, bg=None, override_color=None):
     return out
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    #aa = bb
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)

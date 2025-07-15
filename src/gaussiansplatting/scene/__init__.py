@@ -40,6 +40,8 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
+        #t0 = args.source_path;  print(f't0 : {t0}');    exit(1)
+        #   /workspace/EOGS/data/affine_models/JAX_058
         if os.path.exists(os.path.join(args.source_path, "sparse")):
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
@@ -50,7 +52,6 @@ class Scene:
             scene_info = sceneLoadTypeCallbacks["Affine"](args.source_path, args.images, args.eval)
         else:
             assert False, f"Could not recognize scene type at {os.path.join(args.source_path, 'affine_models.json')}"
-
         if not self.loaded_iter:
             with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
                 dest_file.write(src_file.read())
