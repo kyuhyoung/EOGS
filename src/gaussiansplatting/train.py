@@ -24,6 +24,9 @@ from utils.sh_utils import SH2RGB, RGB2SH
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 import iio
+import torchvision.transforms.functional as tvf
+
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -110,6 +113,10 @@ def render_all_views(cameras, gaussians, pipe, bg=None, override_color=None):
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     #aa = bb
+    #print(f'dataset : {dataset}');  #exit(1)
+    #print(f'type(dataset) : {type(dataset)}');  #exit(1)
+    #print(f'type(opt) : {type(opt)}');  #exit(1)
+    #print(f'type(pipe) : {type(pipe)}');  exit(1)   #   arguments.GroupParams
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -128,7 +135,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     viewpoint_stack = None
     ema_loss_for_log = 0.0
     ema_Lphotometric_for_log = 0.0
-    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress", ncols=80)
+    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Train", ncols=120)
     first_iter += 1
 
     color_correction_optimizer = torch.optim.Adam(
@@ -149,7 +156,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam : AffineCamera = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        viewpoint_cam : AffineCamera = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
 
         # Render
         if (iteration - 1) == debug_from:
@@ -255,6 +262,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+        '''
+        tvf.to_pil_image(viewpoint_cam.original_image).save(f'gt_image.png');  exit(1)
+        print(f'image.shape : {image.shape}, image.min() : {image.min()}, image.max() : {image.max()}')
+        print(f'gt_image.shape : {gt_image.shape}, gt_image.min() : {gt_image.min()}, gt_image.max() : {gt_image.max()}'); exit(1)
+        '''
         Ll1 = l1_loss(image, gt_image)
         # Ll1rel = (image - gt_image).abs() / (gt_image.abs() + 1/255)
         # Ll1rel = Ll1rel.mean()
@@ -298,8 +310,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             ema_Lphotometric_for_log = 0.4 * Lphotometric.item() + 0.6 * ema_Lphotometric_for_log
             if iteration % 10 == 0:
                 progress_bar.set_postfix({
-                    "Loss": f"{ema_loss_for_log:.{7}f}",
-                    "Lphotometric": f"{ema_Lphotometric_for_log:.{7}f}",
+                    "#G": f"{len(gaussians.get_xyz)}",
+                    "minC": f"{image.min():.{2}f}/{gt_image.min():.{2}f}",
+                    "maxC": f"{image.max():.{2}f}/{gt_image.max():.{2}f}",
+                    "Loss": f"{ema_loss_for_log:.{3}f}",
+                    "Lph": f"{ema_Lphotometric_for_log:.{3}f}",
                 })
                 progress_bar.update(10)
             if iteration == opt.iterations:
@@ -540,12 +555,15 @@ if __name__ == "__main__":
     test_iterations_default = sorted(list(set(test_iterations_default)))
     test_iterations_default = []
     parser.add_argument("--test_iterations", nargs="+", type=int, default=test_iterations_default)
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[500, 2_000, 4_000, 7_000, 12_000, 19_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
+    #print(f'sys.argv[0] : {sys.argv[0]}');  exit(1) #   train.py
+    #print(f'args.save_iterations b4 : {args.save_iterations}')
     args.save_iterations.append(args.iterations)
+    #print(f'args.save_iterations after : {args.save_iterations}');  exit(1)
     
     print("Optimizing " + args.model_path)
 

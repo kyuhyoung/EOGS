@@ -26,10 +26,11 @@ class Scene:
         """b
         :param path: Path to colmap scene main folder.
         """
+        #aa = bb
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
-
+        #print(f'load_iteration : {load_iteration}');    exit(1)
         if load_iteration:
             if load_iteration == -1:
                 self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
@@ -81,13 +82,14 @@ class Scene:
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
-
+        #print(f'self.loaded_iter : {self.loaded_iter}');    exit(1) 
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
+            #print(f'scene_info.point_cloud : {scene_info.point_cloud}, self.cameras_extent : {self.cameras_extent}'); exit(1) 
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
     def save(self, iteration):

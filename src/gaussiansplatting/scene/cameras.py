@@ -341,8 +341,8 @@ class Camera(nn.Module):
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
                  ):
+                
         super(Camera, self).__init__()
-
         self.uid = uid
         self.colmap_id = colmap_id
         self.R = R

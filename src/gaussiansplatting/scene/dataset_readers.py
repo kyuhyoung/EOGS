@@ -257,19 +257,42 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
     return scene_info
 
 def readAffineSceneInfo(path, images, eval):
+    #aa = bb
     with open(os.path.join(path, 'affine_models.json'),'r') as metadatas:
         metadatas = json.load(metadatas)
-    print(len(metadatas))
-
+    #print(f'len(metadatas) : {len(metadatas)}') 
+    #print(f"\neval : {eval}\n"); exit(1)
     cam_infos = []
     for n, metadata in enumerate(metadatas):
+        #print(f"metadata['model'] : {metadata['model']}");   exit(1)
         img_path = os.path.join(images, metadata['img'])
+        #print(f"\nimages : {images}, metadata['img'] : {metadata['img']}\n"); exit(1)
+        #print(f"img_path : {img_path}"); exit(1)
         if metadata['img'] != 'Nadir':
-            if 'SYNEW' in img_path:
-                img = iio.read(img_path)
-            else:
-                img = iio.read(img_path) / 255.0
+            img = iio.read(img_path)
+            min_ori = img.min();    max_ori = img.max()
+            if 0 <= min_ori and 1 < max_ori and max_ori <= 255:
+                img = img / 255.0
+            elif  255 < max_ori:
+                #img = (img - min_ori) / (max_ori - min_ori) 
+                #normalized = np.zeros_like(image_array, dtype=np.float32)
+                for c in range(3):
+                    channel = img[:, :, c]
+                    c_min = channel.min();    c_max = channel.max()
+                    img[:, :, c] = (channel - c_min) / (c_max - c_min)
 
+            '''
+            if 'SYNEW' not in img_path:
+                print('DDD')
+                img = img / 255.0
+            '''    
+        min_norm = img.min();    max_norm = img.max()
+        print(f'img_path : {img_path}');  #exit(1) #   ndarray
+        #print(f'type(img) : {type(img)}');  #exit(1) #   ndarray
+        print(f'\timg.shape : {img.shape}');  #exit(1) #   (815, 746, 3)
+        print(f'\tmin_ori : {min_ori}, max_ori : {max_ori}'); #   102 805
+        print(f'\tmin_norm : {min_norm}, max_norm : {max_norm}'); #   0 255
+        #exit(1)
         if '-NEW-' in img_path:
             reference_altitude = images.replace('-NEW-', '-SYNEW-')
         else:
@@ -301,8 +324,8 @@ def readAffineSceneInfo(path, images, eval):
             reference_altitude=reference_altitude,
             image_path=img_path,
             image_name=metadata['img'].replace('.tif',''),
-            width=metadata['width'],
-            height=metadata['height'],
+            width = metadata['width_cropped'],
+            height = metadata['height_cropped'],
             centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
             affine_coef=lm_coef_,
             affine_inter=lm_intercept_,
@@ -315,7 +338,7 @@ def readAffineSceneInfo(path, images, eval):
         )
 
         cam_infos.append(caminfo)
-
+    
     if eval:
         with open(os.path.join(path, 'train.txt'), 'r') as trainsplit:
             trainsplit = trainsplit.read().splitlines()
@@ -364,14 +387,16 @@ def readAffineSceneInfo(path, images, eval):
         # This ensures that the density (both in the inner bbox and in the outer bbox) is correct.
         # There is a catch: we are working in normalized UTM coordinates by a scale factor.
 
-        target_density = 0.13 # 0.13 gaussians per true cubic meter.
+        #target_density = 0.13 # 0.13 gaussians per true cubic meter.
+        target_density = 1.3 # 0.13 gaussians per true cubic meter.
         scale = metadata['model']['scale']
-        sides = max_world*1.1 - min_world*1.1
+        sides = max_world * 1.1 - min_world * 1.1
         volume_inner = np.prod(sides)
         volume_outer = 2**3
         num_pts_to_be_generated = int(target_density * volume_outer * scale**3)
-        xyz = np.random.rand(num_pts_to_be_generated, 3)*2-1
-        inside = np.all(xyz > min_world*1.1, axis=1) & np.all(xyz < max_world*1.1, axis=1)
+        #print(f'volume_outer : {volume_outer}, scale : {scale}');   exit(1)
+        xyz = np.random.rand(num_pts_to_be_generated, 3) * 2 - 1
+        inside = np.all(xyz > min_world * 1.1, axis = 1) & np.all(xyz < max_world * 1.1, axis = 1)
         xyz = xyz[inside]
         print("Number of points generated inside the inner bbox:", len(xyz))
         print("Volume inner bbox:", volume_inner)

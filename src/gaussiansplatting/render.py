@@ -67,7 +67,7 @@ def save_image(dir_save, id_img, mat):
     return nan_pxl_count, ratio_nan_pxl
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, scene_params, resolution):
-    #print(f'model_path : {model_path}, name : {name}');    exit(1)
+    #print(f'model_path : {model_path}, name : {name}, iteration : {iteration}');    exit(1)
     # Prepare the output directories
     base_path = os.path.join(model_path, name, "ours_{}".format(iteration))
     # for kind in ["renders", "altitude", "sunpov", "sunpovaltitude", "shadowmap", "shaded", "cc", "sunaltitudesampled", "gt"]:
@@ -113,7 +113,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         altitude_render = render_pkg[3]
         accumulated_opacity_render = render_pkg[4]
 
-        rendered_uva = torch.stack(view.UV_grid+(altitude_render,), dim=-1)
+        rendered_uva = torch.stack(view.UV_grid + (altitude_render,), dim=-1)
         # rendered_uva back to utm space
         cloud = view.UVA_to_ECEF(rendered_uva.detach().reshape((-1, 3))).cpu().numpy()
 
@@ -238,10 +238,13 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
         import numpy as np
         # TODO: Each dataset has its own meter/pixel resolution
+        #print(f'base_path : {base_path}');  exit(1)
         if 'IARPA' in base_path:
-            resolution=0.3
+            resolution = 0.3
         elif 'JAX' in base_path:
-            resolution=0.5
+            resolution = 0.5
+        elif 'WV3' in base_path:
+            resolution = 0.3
         else:
             raise ValueError('Unknown dataset')
         xmin, xmax = cloud[:, 0].min(), cloud[:, 0].max()
@@ -293,13 +296,14 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
             gaussians._opacity[invalid] = -20.0
 
         bg_color = [1,0,1,scene.getTrainCameras()[0].altitude_bounds[0].item(),0]
+        #print(f'bg_color : {bg_color}');    exit(1)
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, f"train_op{opacity_treshold}", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, [scene.scene_shift, scene.scene_scale, scene.scene_n, scene.scene_l], resolution)
+             render_set(dataset.model_path, f"train_op_{opacity_treshold}", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, [scene.scene_shift, scene.scene_scale, scene.scene_n, scene.scene_l], resolution)
 
         if not skip_test:
-             render_set(dataset.model_path, f"test_op{opacity_treshold}", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, [scene.scene_shift, scene.scene_scale, scene.scene_n, scene.scene_l], resolution)
+             render_set(dataset.model_path, f"test_op_{opacity_treshold}", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, [scene.scene_shift, scene.scene_scale, scene.scene_n, scene.scene_l], resolution)
 
 if __name__ == "__main__":
     # Set up command line argument parser

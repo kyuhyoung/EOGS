@@ -257,7 +257,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	// contains the altitude of the point and not the distance from camera.
 	// The altitude argsort is flipped wrt the distance from camera, hence the minus sign.
 	// Morover, the altitude can be negative, so we need to add 200 to make it positive.
-	depths[idx] = 200.0-p_view.z;
+	//depths[idx] = 200.0 - p_view.z;
+	depths[idx] = 800.0 - p_view.z;
 	if (depths[idx] < 0)
 	{
 		printf("Point is too high: %f!\n", p_view.z);

@@ -64,11 +64,13 @@ def loadCam(args, id, cam_info, resolution_scale):
                   image_name=cam_info.image_name, uid=id, data_device=args.data_device)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+    #aa = bb
     camera_list = []
 
     for id, c in enumerate(cam_infos):
+        #print(f'type(c) : {type(c)}');  exit(1)
         camera_list.append(loadCam(args, id, c, resolution_scale))
-
+    #exit(1)
     return camera_list
 
 def camera_to_JSON(id, camera : Camera):

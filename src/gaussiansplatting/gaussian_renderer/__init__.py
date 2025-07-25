@@ -66,9 +66,24 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         rotations = pc.get_rotation
 
     # We recompiled the rasterizer to render RGB (zero degree) and altitude at the same time
+    #print(f'override_color : {override_color}');    exit(1) #   None
     if override_color is None:
+        #print(f'pc._features_dc.shape : {pc._features_dc.shape}');  #   (67188, 1, 3)   
         rgb = SH2RGB(pc._features_dc).squeeze(1)
+        '''
+        print(f'pc._xyz[..., 0].min() : {pc._xyz[..., 0].min()}, pc._xyz[..., 0].max() : {pc._xyz[..., 0].max()}');
+        print(f'pc._xyz[..., 1].min() : {pc._xyz[..., 1].min()}, pc._xyz[..., 1].max() : {pc._xyz[..., 1].max()}');
+        print(f'pc._xyz[..., 2].min() : {pc._xyz[..., 2].min()}, pc._xyz[..., 2].max() : {pc._xyz[..., 2].max()}');
+        #   -0.795, 0.68     
+        '''
         xyz_uva = viewpoint_camera.ECEF_to_UVA(pc._xyz)
+        '''
+        print(f'xyz_uva[..., 0].min() : {xyz_uva[..., 0].min()}, xyz_uva[..., 0].max() : {xyz_uva[..., 0].max()}');
+        print(f'xyz_uva[..., 1].min() : {xyz_uva[..., 1].min()}, xyz_uva[..., 1].max() : {xyz_uva[..., 1].max()}');
+        print(f'xyz_uva[..., 2].min() : {xyz_uva[..., 2].min()}, xyz_uva[..., 2].max() : {xyz_uva[..., 2].max()}');
+        exit(1)
+        #   -71.2,  101.97    
+        '''
         altitude = xyz_uva[..., 2].unsqueeze(-1)
         constant = torch.ones_like(altitude)
         colors_precomp = torch.cat([rgb, altitude, constant], dim=-1)

@@ -100,7 +100,8 @@ class OptimizationParams(ParamGroup):
         # loss terms starting iterations
         self.iterstart_L_opacity = -1 # TODO: start at 1000
         self.iterstart_L_sun_resample = 9999999999
-        self.iterstart_L_new_resample = 1000
+        #self.iterstart_L_new_resample = 1000
+        self.iterstart_L_new_resample = 80000
         self.iterstart_L_TV_altitude = 9999999999
         self.iterstart_L_erank = -1
         self.iterstart_L_nll = 9999999999
