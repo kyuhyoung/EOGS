@@ -237,13 +237,13 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         cloud = cloud * scene_params[1] + scene_params[0]
 
         import numpy as np
-        # TODO: Each dataset has its own meter/pixel resolution
+        # TODO: Each dataset h:waas its own meter/pixel resolution
         #print(f'base_path : {base_path}');  exit(1)
         if 'IARPA' in base_path:
             resolution = 0.3
         elif 'JAX' in base_path:
             resolution = 0.5
-        elif 'WV3' in base_path:
+        elif 'add' in base_path:
             resolution = 0.3
         else:
             raise ValueError('Unknown dataset')

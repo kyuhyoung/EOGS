@@ -50,7 +50,7 @@ class Scene:
             scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
         elif os.path.exists(os.path.join(args.source_path, "affine_models.json")):
             print("Found affine_models.json file, assuming Affine data set!")
-            scene_info = sceneLoadTypeCallbacks["Affine"](args.source_path, args.images, args.eval)
+            scene_info = sceneLoadTypeCallbacks["Affine"](args.source_path, args.images, args.type_norm, args.shall_color_transfer, args.eval)
         else:
             assert False, f"Could not recognize scene type at {os.path.join(args.source_path, 'affine_models.json')}"
         if not self.loaded_iter:

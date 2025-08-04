@@ -21,9 +21,10 @@ if pip install submodules/diff-gaussian-rasterization submodules/simple-knn; the
     #for scene in "JAX_068_john_img"
     #for scene in "JAX_068_selected_by_john"
     #for scene in "JAX_214_selected_by_john"
-    #for scene in "JAX_214_john"
-    for scene in "add_WV3"
+    #for scenee in "JAX_214_john"
+    #for scene in "add_WV3"
     #for scene in "add_EROS"
+    for scene in "add_PNEO"
     #for scene in "JAX_214"
     # for scene in "JAX_004" "JAX_068" "JAX_214" "JAX_260"
     #for scene in "IARPA_001" "IARPA_002" "IARPA_003" "JAX_004" "JAX_068" "JAX_214" "JAX_260"
@@ -31,7 +32,7 @@ if pip install submodules/diff-gaussian-rasterization submodules/simple-knn; the
 
         expname=$scene
 
-: << END
+#: << END
 
         path_json="${data}/affine_models/${scene}/affine_models.json"
         #echo "path_json : $path_json"
@@ -49,12 +50,23 @@ if pip install submodules/diff-gaussian-rasterization submodules/simple-knn; the
             export CUDA_VISIBLE_DEVICES=0
             export CUDA_LAUNCH_BLOCKING=1
             export TORCH_USE_CUDA_DSA=1
-            python train.py \
-                -s ${data}/affine_models/${scene} \
-                --images ${data}/images/${scene} \
-                -m ${basepath}/output/${expname} \
-                --sh_degree 0 \
-                --iterations ${numiterations}
+            if [[ "$scene" == "$add_er"* ]]; then
+                python train.py \
+                    -s ${data}/affine_models/${scene} \
+                    --images ${data}/images/${scene} \
+                    -m ${basepath}/output/${expname} \
+                    --sh_degree 0 \
+                    --iterations ${numiterations} #\
+                    #--iterstart_shadowmapping 10000
+            else
+                python train.py \
+                    -s ${data}/affine_models/${scene} \
+                    --images ${data}/images/${scene} \
+                    -m ${basepath}/output/${expname} \
+                    --sh_degree 0 \
+                    --iterations ${numiterations} \
+                    --iterstart_shadowmapping 10000
+            fi
         else
             # Train the EOGS model
             python train.py \
@@ -66,9 +78,9 @@ if pip install submodules/diff-gaussian-rasterization submodules/simple-knn; the
                 --eval
         fi
 
-END
+#END
 
-#: << END
+: << END
 
         export CUDA_VISIBLE_DEVICES=1
         for iter_render in $ITERS_RENDER
@@ -79,7 +91,7 @@ END
             #python render.py -m "${basepath}/output/${expname}/density_0.13" --iteration $iter_render
         done
 
-#END
+END
 
 
 

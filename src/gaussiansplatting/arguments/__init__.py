@@ -53,6 +53,10 @@ class ModelParams(ParamGroup):
         self._resolution = -1
         self._white_background = False
         self.data_device = "cuda"
+        #self.type_norm = 'NORM_DATASET' #   NORM_DATASET, NORM_IMAGE_WISE, NORM_CHANNEL_WISE
+        self.type_norm = 'NORM_CHANNEL_WISE'    #   이 중에서 이게 제일 나음.
+        #self.type_norm = 'NORM_DATASET_CHANNEL_WISE' 
+        self.shall_color_transfer = True
         self.eval = False
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -94,7 +98,8 @@ class OptimizationParams(ParamGroup):
         # EOGS specific parameters
         #####################################
         # action starting iterations
-        self.iterstart_shadowmapping = 1000
+        self.iterstart_shadowmapping = 1000    #   ori
+        #self.iterstart_shadowmapping = 10000
         self.color_reset_iterations = 9999999999
 
         # loss terms starting iterations

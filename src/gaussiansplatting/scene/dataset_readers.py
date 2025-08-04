@@ -24,6 +24,10 @@ from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
 import iio
 from scene.cameras import AffineCameraInfo
+import cv2
+from sklearn.cluster import KMeans
+from scipy.spatial.distance import pdist
+
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -256,19 +260,462 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            ply_path=ply_path)
     return scene_info
 
-def readAffineSceneInfo(path, images, eval):
+
+
+def calculate_lab_variance(image: np.ndarray) -> float:
+    """Lab 색공간에서의 분산을 계산합니다."""
+    # 입력이 0-1 범위인 경우 0-255로 변환
+    if image.dtype == np.float32 or image.dtype == np.float64:
+        if image.max() <= 1.0:
+            image = (image * 255).astype(np.uint8)
+    
+    lab_image = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    
+    variances = []
+    for channel in range(3):
+        var = np.var(lab_image[:, :, channel])
+        variances.append(var)
+    
+    return np.mean(variances)
+
+def calculate_unique_color_ratio(image: np.ndarray) -> float:
+    """전체 픽셀 대비 고유 색상의 비율을 계산합니다."""
+    pixels = image.reshape(-1, 3)
+    unique_colors = np.unique(pixels, axis=0)
+    
+    return len(unique_colors) / len(pixels)
+
+def calculate_color_std(image: np.ndarray) -> float:
+    """RGB 채널별 표준편차의 평균을 계산합니다."""
+    stds = []
+    for channel in range(3):
+        std = np.std(image[:, :, channel])
+        stds.append(std)
+    
+    return np.mean(stds)
+
+def calculate_cluster_diversity(image: np.ndarray, n_clusters: int = 8) -> float:
+    """K-means 클러스터링을 사용하여 색상 다양성을 측정합니다."""
+    # 이미지를 1D 배열로 변환
+    pixels = image.reshape(-1, 3)
+    
+    # 샘플링 (계산 속도 향상)
+    if len(pixels) > 10000:
+        indices = np.random.choice(len(pixels), 10000, replace=False)
+        pixels = pixels[indices]
+    
+    # K-means 클러스터링
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    kmeans.fit(pixels)
+    
+    # 클러스터 중심 간의 평균 거리 계산
+    centers = kmeans.cluster_centers_
+    distances = pdist(centers)
+    
+    return np.mean(distances)
+
+def calculate_histogram_entropy(image: np.ndarray, bins: int = 64) -> float:
+    """히스토그램 엔트로피를 계산합니다."""
+    # 각 채널별 히스토그램 계산
+    entropies = []
+    for channel in range(3):
+        hist, _ = np.histogram(image[:, :, channel], bins=bins, range=(0, 256))
+        hist = hist / hist.sum()  # 정규화
+        hist = hist[hist > 0]  # 0인 값 제거
+        entropy = -np.sum(hist * np.log2(hist))
+        entropies.append(entropy)
+    
+    return np.mean(entropies)
+
+def calculate_color_variety_metrics(image: np.ndarray) -> dict[str, float]:
+    """
+    이미지의 색 분포 다양성을 측정하는 여러 메트릭을 계산합니다.
+    
+    Args:
+        image: 0-1로 정규화된 RGB 또는 BGR 이미지 (H, W, C) 형태
+    
+    Returns:
+        다양한 색 분포 메트릭들을 포함한 딕셔너리
+    """
+    # 0-1 범위를 0-255 범위로 변환 (계산을 위해)
+    image_255 = (image * 255).astype(np.uint8)
+    
+    # BGR인 경우 RGB로 변환, 이미 RGB인 경우 그대로 사용
+    if len(image.shape) == 3 and image.shape[2] == 3:
+        # OpenCV 스타일 (BGR)로 가정하고 RGB로 변환
+        rgb_image = cv2.cvtColor(image_255, cv2.COLOR_BGR2RGB)
+    else:
+        rgb_image = image_255
+    
+    # 1. Color Histogram Entropy (히스토그램 엔트로피)
+    hist_entropy = calculate_histogram_entropy(rgb_image)
+    
+    # 2. Color Clustering Diversity (K-means 클러스터링 기반 다양성)
+    cluster_diversity = calculate_cluster_diversity(rgb_image)
+    
+    # 3. Color Standard Deviation (색상 표준편차)
+    color_std = calculate_color_std(rgb_image)
+    
+    # 4. Unique Color Ratio (고유 색상 비율)
+    unique_ratio = calculate_unique_color_ratio(rgb_image)
+    
+    # 5. Lab Color Space Variance (Lab 색공간에서의 분산)
+    lab_variance = calculate_lab_variance(image_255)
+    
+    return {
+        'histogram_entropy': hist_entropy,
+        'cluster_diversity': cluster_diversity,
+        'color_std': color_std,
+        'unique_ratio': unique_ratio,
+        'lab_variance': lab_variance
+    }
+
+def select_reference_image(images: dict[str, np.ndarray]) -> str:
+    """
+    여러 이미지 중에서 색 분포가 가장 다양한 이미지를 선택합니다.
+    
+    Args:
+        images: {image_id: image_array} 형태의 딕셔너리
+                image_array는 0-1로 정규화된 numpy array (H, W, C)
+    
+    Returns:
+        선택된 이미지의 id (string)
+    """
+    metrics_results = {}
+    
+    for image_id, image in images.items():
+        if image is None:
+            print(f"Warning: Image with id '{image_id}' is None")
+            continue
+            
+        # 색 분포 메트릭 계산
+        metrics = calculate_color_variety_metrics(image)
+        metrics_results[image_id] = metrics
+        
+        print(f"\n{image_id}:")
+        for metric, value in metrics.items():
+            print(f"  {metric}: {value:.4f}")
+    
+    # 종합 점수 계산 (가중 평균)
+    weights = {
+        'histogram_entropy': 0.3,
+        'cluster_diversity': 0.25,
+        'color_std': 0.2,
+        'unique_ratio': 0.15,
+        'lab_variance': 0.1
+    }
+    
+    best_image_id = None
+    best_score = -1
+    
+    for image_id, metrics in metrics_results.items():
+        # 정규화된 점수 계산
+        score = sum(weights[metric] * metrics[metric] for metric in weights.keys())
+        metrics_results[image_id]['composite_score'] = score
+        
+        if score > best_score:
+            best_score = score
+            best_image_id = image_id
+    
+    print(f"\n=== 선택된 기준 이미지 ===")
+    print(f"이미지 ID: {best_image_id}")
+    print(f"종합 점수: {best_score:.4f}")
+    
+    return best_image_id, best_score
+
+
+def color_transfer_reinhard(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """
+    Reinhard 방법을 사용한 색상 전송
+    
+    Args:
+        source: 색상을 가져올 소스 이미지 (기준 이미지) - 0-1 정규화된 이미지
+        target: 색상을 적용할 타겟 이미지 - 0-1 정규화된 이미지
+    
+    Returns:
+        색상이 전송된 이미지 (0-1 범위)
+    """
+    # 0-1 범위를 0-255로 변환
+    source_255 = (source * 255).astype(np.uint8)
+    target_255 = (target * 255).astype(np.uint8)
+    
+    # Lab 색공간으로 변환
+    source_lab = cv2.cvtColor(source_255, cv2.COLOR_BGR2LAB).astype(np.float32)
+    target_lab = cv2.cvtColor(target_255, cv2.COLOR_BGR2LAB).astype(np.float32)
+    
+    # 각 채널의 평균과 표준편차 계산
+    source_mean = np.mean(source_lab, axis=(0, 1))
+    source_std = np.std(source_lab, axis=(0, 1))
+    
+    target_mean = np.mean(target_lab, axis=(0, 1))
+    target_std = np.std(target_lab, axis=(0, 1))
+    
+    # 색상 전송 수행
+    result_lab = target_lab.copy()
+    for i in range(3):
+        if target_std[i] > 1e-6:  # 0으로 나누기 방지
+            result_lab[:, :, i] = (target_lab[:, :, i] - target_mean[i]) * (source_std[i] / target_std[i]) + source_mean[i]
+    
+    # 값 범위 클리핑
+    result_lab = np.clip(result_lab, 0, 255)
+    
+    # BGR로 다시 변환
+    result_255 = cv2.cvtColor(result_lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+    
+    # 0-1 범위로 정규화하여 반환
+    result = result_255.astype(np.float32) / 255.0
+    
+    return result
+
+
+def transfer_color_to_one_of_variety(di_fn_im01):
+    fn_ref, skore = select_reference_image(di_fn_im01)
+    im01_ref = di_fn_im01[fn_ref]
+    for fn, im01_tgt in di_fn_im01.items():
+        if fn == fn_ref:
+            continue
+        im_transferred = color_transfer_reinhard(im01_ref, im01_tgt)
+        di_fn_im01[fn] = im_transferred
+    return di_fn_im01      
+    
+
+def readAffineSceneInfo(path, images, type_norm, shall_color_transfer, eval):
     #aa = bb
     with open(os.path.join(path, 'affine_models.json'),'r') as metadatas:
         metadatas = json.load(metadatas)
     #print(f'len(metadatas) : {len(metadatas)}') 
     #print(f"\neval : {eval}\n"); exit(1)
     cam_infos = []
-    for n, metadata in enumerate(metadatas):
-        #print(f"metadata['model'] : {metadata['model']}");   exit(1)
-        img_path = os.path.join(images, metadata['img'])
-        #print(f"\nimages : {images}, metadata['img'] : {metadata['img']}\n"); exit(1)
-        #print(f"img_path : {img_path}"); exit(1)
-        if metadata['img'] != 'Nadir':
+
+    v_min_total = 9999999999999999; v_max_total = -v_min_total;
+    if 'NORM_DATASET' == type_norm:
+        for n, metadata in enumerate(metadatas):
+            #print(f'\nmetadata : {metadata}\n');    #exit(1)
+            if metadata['img'] == 'Nadir':
+                continue
+            img_path = os.path.join(images, metadata['img'])
+            img = iio.read(img_path)
+            min_ori = img.min();    max_ori = img.max()
+            if min_ori < v_min_total:
+                v_min_total = min_ori
+            if max_ori > v_max_total:
+                v_max_total = max_ori
+                     
+        for n, metadata in enumerate(metadatas):
+            img_path = os.path.join(images, metadata['img'])
+            if metadata['img'] == 'Nadir':
+                continue
+            img = iio.read(img_path)
+            min_ori = img.min();    max_ori = img.max()
+            if 0 <= min_ori and 1 < max_ori and max_ori <= 255:
+                img = img / 255.0
+            elif 255 < max_ori:
+                img = (img - v_min_total) / (v_max_total - v_min_total)
+            min_norm = img.min();    max_norm = img.max()
+            '''
+            print(f'\timg.shape : {img.shape}');  #exit(1) #   (815, 746, 3)
+            print(f'\tmin_ori : {min_ori}, max_ori : {max_ori}'); #   102 805
+            print(f'\tmin_norm : {min_norm}, max_norm : {max_norm}'); #   0 255
+            '''
+            if '-NEW-' in img_path:
+                reference_altitude = images.replace('-NEW-', '-SYNEW-')
+            else:
+                #assert '-SYNEW-' in img_path, "Reference altitude not found"
+                reference_altitude = images
+            reference_altitude = os.path.join(reference_altitude, 'altitude', metadata['img'])
+            if not os.path.exists(reference_altitude):
+                reference_altitude = img.copy()[...,0]*0.0
+                print("Warning: Reference altitude not found, using zeros")
+            else:
+                reference_altitude = np.squeeze(iio.read(reference_altitude))
+
+            lm_coef_ = np.array(metadata['model']['coef_'])
+            lm_intercept_ = np.array(metadata['model']['intercept_'])
+            sun_lm_coef_ = np.array(metadata['sun_model']['coef_'])
+            sun_lm_intercept_ = np.array(metadata['sun_model']['intercept_'])
+            altitude_bounds = np.array([metadata['min_alt'], metadata['max_alt']])
+            min_world = np.array(metadata['model']['min_world'])
+            max_world = np.array(metadata['model']['max_world'])
+
+            caminfo = AffineCameraInfo(
+                uid=None,
+                R=None,
+                T=None,
+                FovY=None,
+                FovX=None,
+                image=img,
+                is_reference_camera=False,
+                reference_altitude=reference_altitude,
+                image_path=img_path,
+                image_name=metadata['img'].replace('.tif',''),
+                width = metadata['width_cropped'],
+                height = metadata['height_cropped'],
+                centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
+                affine_coef=lm_coef_,
+                affine_inter=lm_intercept_,
+                altitude_bounds=altitude_bounds,
+                min_world = min_world,
+                max_world = max_world,
+                sun_affine_coef=sun_lm_coef_,
+                sun_affine_inter=sun_lm_intercept_,
+                camera_to_sun=np.array(metadata['sun_model']['camera_to_sun'])
+            )
+
+            cam_infos.append(caminfo)
+
+    elif 'NORM_DATASET_CHANNEL_WISE' == type_norm:
+        channel_min = [9999999999] * 3;  channel_max = [-9999999999] * 3
+        #print(f'channel_min : {channel_min}, channel_max : {channel_max}'); exit(1)
+        for n, metadata in enumerate(metadatas):
+            #print(f'\nmetadata : {metadata}\n');    #exit(1)
+            if metadata['img'] == 'Nadir':
+                continue
+            img_path = os.path.join(images, metadata['img'])
+            img = iio.read(img_path)
+            for chn in range(3):
+                channel = img[:, :, chn]
+                c_min = channel.min();  c_max = channel.max()
+                if c_min < channel_min[chn]:
+                    channel_min[chn] = c_min
+                if channel_max[chn] < c_max:
+                    channel_max[chn] = c_max
+                     
+        for n, metadata in enumerate(metadatas):
+            img_path = os.path.join(images, metadata['img'])
+            if metadata['img'] == 'Nadir':
+                continue
+            img = iio.read(img_path)
+            min_ori = img.min();    max_ori = img.max()
+            if 0 <= min_ori and 1 < max_ori and max_ori <= 255:
+                img = img / 255.0
+            elif 255 < max_ori:
+                for chn in range(3):
+                    channel = img[:, :, chn]
+                    img[:, :, chn] = (channel - channel_min[chn]) / (channel_max[chn] - channel_min[chn])
+            min_norm = img.min();    max_norm = img.max()
+            '''
+            print(f'\timg.shape : {img.shape}');  #exit(1) #   (815, 746, 3)
+            print(f'\tmin_ori : {min_ori}, max_ori : {max_ori}'); #   102 805
+            print(f'\tmin_norm : {min_norm}, max_norm : {max_norm}'); #   0 255
+            '''
+            if '-NEW-' in img_path:
+                reference_altitude = images.replace('-NEW-', '-SYNEW-')
+            else:
+                #assert '-SYNEW-' in img_path, "Reference altitude not found"
+                reference_altitude = images
+            reference_altitude = os.path.join(reference_altitude, 'altitude', metadata['img'])
+            if not os.path.exists(reference_altitude):
+                reference_altitude = img.copy()[...,0]*0.0
+                print("Warning: Reference altitude not found, using zeros")
+            else:
+                reference_altitude = np.squeeze(iio.read(reference_altitude))
+
+            lm_coef_ = np.array(metadata['model']['coef_'])
+            lm_intercept_ = np.array(metadata['model']['intercept_'])
+            sun_lm_coef_ = np.array(metadata['sun_model']['coef_'])
+            sun_lm_intercept_ = np.array(metadata['sun_model']['intercept_'])
+            altitude_bounds = np.array([metadata['min_alt'], metadata['max_alt']])
+            min_world = np.array(metadata['model']['min_world'])
+            max_world = np.array(metadata['model']['max_world'])
+
+            caminfo = AffineCameraInfo(
+                uid=None,
+                R=None,
+                T=None,
+                FovY=None,
+                FovX=None,
+                image=img,
+                is_reference_camera=False,
+                reference_altitude=reference_altitude,
+                image_path=img_path,
+                image_name=metadata['img'].replace('.tif',''),
+                width = metadata['width_cropped'],
+                height = metadata['height_cropped'],
+                centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
+                affine_coef=lm_coef_,
+                affine_inter=lm_intercept_,
+                altitude_bounds=altitude_bounds,
+                min_world = min_world,
+                max_world = max_world,
+                sun_affine_coef=sun_lm_coef_,
+                sun_affine_inter=sun_lm_intercept_,
+                camera_to_sun=np.array(metadata['sun_model']['camera_to_sun'])
+            )
+
+            cam_infos.append(caminfo)
+
+
+
+    elif 'NORM_IMAGE_WISE' == type_norm:
+        for n, metadata in enumerate(metadatas):
+            img_path = os.path.join(images, metadata['img'])
+            if metadata['img'] == 'Nadir':
+                continue
+          
+            img = iio.read(img_path)
+            min_ori = img.min();    max_ori = img.max()
+            if 0 <= min_ori and 1 < max_ori and max_ori <= 255:
+                img = img / 255.0
+            elif 255 < max_ori:
+                img = (img - min_ori) / (max_ori - min_ori)
+            min_norm = img.min();    max_norm = img.max()
+            if '-NEW-' in img_path:
+                reference_altitude = images.replace('-NEW-', '-SYNEW-')
+            else:
+                #assert '-SYNEW-' in img_path, "Reference altitude not found"
+                reference_altitude = images
+            reference_altitude = os.path.join(reference_altitude, 'altitude', metadata['img'])
+            if not os.path.exists(reference_altitude):
+                reference_altitude = img.copy()[...,0]*0.0
+                print("Warning: Reference altitude not found, using zeros")
+            else:
+                reference_altitude = np.squeeze(iio.read(reference_altitude))
+
+            lm_coef_ = np.array(metadata['model']['coef_'])
+            lm_intercept_ = np.array(metadata['model']['intercept_'])
+            sun_lm_coef_ = np.array(metadata['sun_model']['coef_'])
+            sun_lm_intercept_ = np.array(metadata['sun_model']['intercept_'])
+            altitude_bounds = np.array([metadata['min_alt'], metadata['max_alt']])
+            min_world = np.array(metadata['model']['min_world'])
+            max_world = np.array(metadata['model']['max_world'])
+
+            caminfo = AffineCameraInfo(
+                uid=None,
+                R=None,
+                T=None,
+                FovY=None,
+                FovX=None,
+                image=img,
+                is_reference_camera=False,
+                reference_altitude=reference_altitude,
+                image_path=img_path,
+                image_name=metadata['img'].replace('.tif',''),
+                width = metadata['width_cropped'],
+                height = metadata['height_cropped'],
+                centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
+                affine_coef=lm_coef_,
+                affine_inter=lm_intercept_,
+                altitude_bounds=altitude_bounds,
+                min_world = min_world,
+                max_world = max_world,
+                sun_affine_coef=sun_lm_coef_,
+                sun_affine_inter=sun_lm_intercept_,
+                camera_to_sun=np.array(metadata['sun_model']['camera_to_sun'])
+            )
+
+            cam_infos.append(caminfo)
+       
+    elif 'NORM_CHANNEL_WISE' == type_norm:
+        di_fn_im = {}
+        for n, metadata in enumerate(metadatas):
+            #print(f"metadata['model'] : {metadata['model']}");   exit(1)
+            name_img = metadata['img']
+            img_path = os.path.join(images, name_img)
+            #print(f"\nimages : {images}, metadata['img'] : {metadata['img']}\n"); exit(1)
+            #print(f"img_path : {img_path}"); exit(1)
+            #if metadata['img'] != 'Nadir':
+            if metadata['img'] == 'Nadir':
+                continue
             img = iio.read(img_path)
             min_ori = img.min();    max_ori = img.max()
             if 0 <= min_ori and 1 < max_ori and max_ori <= 255:
@@ -280,64 +727,68 @@ def readAffineSceneInfo(path, images, eval):
                     channel = img[:, :, c]
                     c_min = channel.min();    c_max = channel.max()
                     img[:, :, c] = (channel - c_min) / (c_max - c_min)
-
+            di_fn_im[name_img] = img
+        if shall_color_transfer:
+            di_fn_im = transfer_color_to_one_of_variety(di_fn_im)
+        for n, metadata in enumerate(metadatas):
+            name_img = metadata['img']
+            if name_img == 'Nadir':
+                continue
+            img_path = os.path.join(images, name_img)
+            img = di_fn_im[name_img]
             '''
-            if 'SYNEW' not in img_path:
-                print('DDD')
-                img = img / 255.0
-            '''    
-        min_norm = img.min();    max_norm = img.max()
-        print(f'img_path : {img_path}');  #exit(1) #   ndarray
-        #print(f'type(img) : {type(img)}');  #exit(1) #   ndarray
-        print(f'\timg.shape : {img.shape}');  #exit(1) #   (815, 746, 3)
-        print(f'\tmin_ori : {min_ori}, max_ori : {max_ori}'); #   102 805
-        print(f'\tmin_norm : {min_norm}, max_norm : {max_norm}'); #   0 255
-        #exit(1)
-        if '-NEW-' in img_path:
-            reference_altitude = images.replace('-NEW-', '-SYNEW-')
-        else:
-            #assert '-SYNEW-' in img_path, "Reference altitude not found"
-            reference_altitude = images
-        reference_altitude = os.path.join(reference_altitude, 'altitude', metadata['img'])
-        if not os.path.exists(reference_altitude):
-            reference_altitude = img.copy()[...,0]*0.0
-            print("Warning: Reference altitude not found, using zeros")
-        else:
-            reference_altitude = np.squeeze(iio.read(reference_altitude))
+            min_norm = img.min();    max_norm = img.max()
+            print(f'img_path : {img_path}');  #exit(1) #   ndarray
+            print(f'\timg.shape : {img.shape}');  #exit(1) #   (815, 746, 3)
+            print(f'\tmin_ori : {min_ori}, max_ori : {max_ori}'); #   102 805
+            print(f'\tmin_norm : {min_norm}, max_norm : {max_norm}'); #   0 255
+            #exit(1)
+            '''
+            if '-NEW-' in img_path:
+                reference_altitude = images.replace('-NEW-', '-SYNEW-')
+            else:
+                #assert '-SYNEW-' in img_path, "Reference altitude not found"
+                reference_altitude = images
+            reference_altitude = os.path.join(reference_altitude, 'altitude', metadata['img'])
+            if not os.path.exists(reference_altitude):
+                reference_altitude = img.copy()[...,0]*0.0
+                print("Warning: Reference altitude not found, using zeros")
+            else:
+                reference_altitude = np.squeeze(iio.read(reference_altitude))
 
-        lm_coef_ = np.array(metadata['model']['coef_'])
-        lm_intercept_ = np.array(metadata['model']['intercept_'])
-        sun_lm_coef_ = np.array(metadata['sun_model']['coef_'])
-        sun_lm_intercept_ = np.array(metadata['sun_model']['intercept_'])
-        altitude_bounds = np.array([metadata['min_alt'], metadata['max_alt']])
-        min_world = np.array(metadata['model']['min_world'])
-        max_world = np.array(metadata['model']['max_world'])
+            lm_coef_ = np.array(metadata['model']['coef_'])
+            lm_intercept_ = np.array(metadata['model']['intercept_'])
+            sun_lm_coef_ = np.array(metadata['sun_model']['coef_'])
+            sun_lm_intercept_ = np.array(metadata['sun_model']['intercept_'])
+            altitude_bounds = np.array([metadata['min_alt'], metadata['max_alt']])
+            min_world = np.array(metadata['model']['min_world'])
+            max_world = np.array(metadata['model']['max_world'])
 
-        caminfo = AffineCameraInfo(
-            uid=None,
-            R=None,
-            T=None,
-            FovY=None,
-            FovX=None,
-            image=img,
-            is_reference_camera=False,
-            reference_altitude=reference_altitude,
-            image_path=img_path,
-            image_name=metadata['img'].replace('.tif',''),
-            width = metadata['width_cropped'],
-            height = metadata['height_cropped'],
-            centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
-            affine_coef=lm_coef_,
-            affine_inter=lm_intercept_,
-            altitude_bounds=altitude_bounds,
-            min_world = min_world,
-            max_world = max_world,
-            sun_affine_coef=sun_lm_coef_,
-            sun_affine_inter=sun_lm_intercept_,
-            camera_to_sun=np.array(metadata['sun_model']['camera_to_sun'])
-        )
+            caminfo = AffineCameraInfo(
+                uid=None,
+                R=None,
+                T=None,
+                FovY=None,
+                FovX=None,
+                image=img,
+                is_reference_camera=False,
+                reference_altitude=reference_altitude,
+                image_path=img_path,
+                image_name=metadata['img'].replace('.tif',''),
+                width = metadata['width_cropped'],
+                height = metadata['height_cropped'],
+                centerofscene_ECEF=np.array(metadata['centerofscene_UTM']),
+                affine_coef=lm_coef_,
+                affine_inter=lm_intercept_,
+                altitude_bounds=altitude_bounds,
+                min_world = min_world,
+                max_world = max_world,
+                sun_affine_coef=sun_lm_coef_,
+                sun_affine_inter=sun_lm_intercept_,
+                camera_to_sun=np.array(metadata['sun_model']['camera_to_sun'])
+            )
 
-        cam_infos.append(caminfo)
+            cam_infos.append(caminfo)
     
     if eval:
         with open(os.path.join(path, 'train.txt'), 'r') as trainsplit:
@@ -387,14 +838,18 @@ def readAffineSceneInfo(path, images, eval):
         # This ensures that the density (both in the inner bbox and in the outer bbox) is correct.
         # There is a catch: we are working in normalized UTM coordinates by a scale factor.
 
-        #target_density = 0.13 # 0.13 gaussians per true cubic meter.
-        target_density = 1.3 # 0.13 gaussians per true cubic meter.
+        target_density = 0.13 # 0.13 gaussians per true cubic meter.    ori
+        #target_density = 0.13 * 0.5 * 0.5 * 0.5 #* 0.5 # 0.13 gaussians per true cubic meter.
+        #target_density = 1.3 # 0.13 gaussians per true cubic meter.
         scale = metadata['model']['scale']
         sides = max_world * 1.1 - min_world * 1.1
         volume_inner = np.prod(sides)
         volume_outer = 2**3
         num_pts_to_be_generated = int(target_density * volume_outer * scale**3)
-        #print(f'volume_outer : {volume_outer}, scale : {scale}');   exit(1)
+        print(f'# pt : {num_pts_to_be_generated}, target_density : {target_density}, scale : {scale}');   #exit(1)
+        # # pt : 423487383, target_density : 0.13, scale : 741.2005151003221 for add_WV3
+        # # pt : 18438347, target_density : 0.13, scale : 260.7531437054834 for JAX_214
+        # # pt : 76696983, target_density : 0.008125, scale : 1056.7079523446394 for add_EROS
         xyz = np.random.rand(num_pts_to_be_generated, 3) * 2 - 1
         inside = np.all(xyz > min_world * 1.1, axis = 1) & np.all(xyz < max_world * 1.1, axis = 1)
         xyz = xyz[inside]

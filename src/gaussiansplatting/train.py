@@ -25,7 +25,7 @@ from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 import iio
 import torchvision.transforms.functional as tvf
-
+#os.environ["TERM"] = "xterm-256color"
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -135,7 +135,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     viewpoint_stack = None
     ema_loss_for_log = 0.0
     ema_Lphotometric_for_log = 0.0
-    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Train", ncols=120)
+    progress_bar = tqdm(range(first_iter, opt.iterations), desc = "Train", ncols = 130)
     first_iter += 1
 
     color_correction_optimizer = torch.optim.Adam(
@@ -146,7 +146,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     init_number_of_gaussians = len(gaussians._xyz)
 
     for iteration in range(first_iter, opt.iterations + 1):        
-
+        #print(f'aaa');
+        #if 3 == iteration:
+        #    exit(1)
         iter_start.record()
 
         # Every 1000 its we increase the levels of SH up to a maximum degree
@@ -190,6 +192,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             L_accumulated_opacity = (1.0 - accumulated_opacity_render).mean()
 
         # Sun camera rendering and losses
+        #print(f'opt.iterstart_shadowmapping : {opt.iterstart_shadowmapping}');  exit(1)
         if iteration > opt.iterstart_shadowmapping:
             sun_camera, camera_to_sun = viewpoint_cam.get_sun_camera()
             sun_rgb_sample, sun_altitude_sample, sun_uv = render_resample_virtual_camera(
@@ -263,9 +266,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         '''
-        tvf.to_pil_image(viewpoint_cam.original_image).save(f'gt_image.png');  exit(1)
-        print(f'image.shape : {image.shape}, image.min() : {image.min()}, image.max() : {image.max()}')
-        print(f'gt_image.shape : {gt_image.shape}, gt_image.min() : {gt_image.min()}, gt_image.max() : {gt_image.max()}'); exit(1)
+        #print(f'\nviewpoint_cam.image_name : {viewpoint_cam.image_name}\n');    exit(1) 
+        fn_gt = f'gt_image_{viewpoint_cam.image_name}_{dataset.type_norm}.png'
+        print(f'\nfn_gt : {fn_gt}, viewpoint_cam.original_image.shape : {viewpoint_cam.original_image.shape}\n');   #exit(1) 
+        tvf.to_pil_image(viewpoint_cam.original_image).save(fn_gt);  #exit(1)
+        #print(f'image.shape : {image.shape}, image.min() : {image.min()}, image.max() : {image.max()}')
+        #print(f'gt_image.shape : {gt_image.shape}, gt_image.min() : {gt_image.min()}, gt_image.max() : {gt_image.max()}'); #exit(1)
         '''
         Ll1 = l1_loss(image, gt_image)
         # Ll1rel = (image - gt_image).abs() / (gt_image.abs() + 1/255)
@@ -311,10 +317,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration % 10 == 0:
                 progress_bar.set_postfix({
                     "#G": f"{len(gaussians.get_xyz)}",
-                    "minC": f"{image.min():.{2}f}/{gt_image.min():.{2}f}",
-                    "maxC": f"{image.max():.{2}f}/{gt_image.max():.{2}f}",
                     "Loss": f"{ema_loss_for_log:.{3}f}",
                     "Lph": f"{ema_Lphotometric_for_log:.{3}f}",
+                    "minC": f"{image.min():.{2}f}/{gt_image.min():.{2}f}",
+                    "maxC": f"{image.max():.{2}f}/{gt_image.max():.{2}f}",
                 })
                 progress_bar.update(10)
             if iteration == opt.iterations:
@@ -366,6 +372,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             # Saving
             if (iteration in saving_iterations):
+
+                fn_gt = f'gt_{viewpoint_cam.image_name}_{dataset.type_norm}_{iteration}_{ema_loss_for_log:.3f}.png'
+                fn_rendered = f'rd_{viewpoint_cam.image_name}_{dataset.type_norm}_{iteration}_{ema_loss_for_log:.3f}.png'
+                path_gt = os.path.join(scene.model_path, fn_gt)
+                path_rendered = os.path.join(scene.model_path, fn_rendered)
+                #print(f'\nfn_gt : {fn_gt}, viewpoint_cam.original_image.shape : {viewpoint_cam.original_image.shape}\n');   #exit(1) 
+                tvf.to_pil_image(viewpoint_cam.original_image).save(path_gt);
+                tvf.to_pil_image(image).save(path_rendered);
+                #exit(1)
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
                 # Now save also the color correction

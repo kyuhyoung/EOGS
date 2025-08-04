@@ -508,13 +508,17 @@ def get_meta_from_rpc_and_3dmet(li_path_rpc, path_3dmet, dir_img):
         if matched_group:
             #exit(1)
             min_height, max_height = compute_altitude_range(matched_data)
-            '''
+            #'''
             dif_meter = max_height - min_height;
-            if dif_meter < 30:
+            print(f'dif_meter : {dif_meter}');  #exit(1) 
+            #   dif_meter : 228.99999999999997  for EROS
+            #   dif_meter : 1                   for WV3
+            # 
+            if dif_meter > 10:
                 avg_height = 0.5 * (min_height + max_height)
-                min_height = avg_height - 15
-                max_height = avg_height + 15
-            '''
+                min_height = avg_height - 5
+                max_height = avg_height + 5
+            #'''
             di_meta['img'] = f'{id_img}.tif'
             di_meta['min_alt'] = min_height;   di_meta['max_alt'] = max_height
             di_meta['sun_azimuth'] = matched_data.get('SunAzimuth')
